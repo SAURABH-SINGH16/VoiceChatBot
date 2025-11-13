@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat with Autobot 🤖</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='chatbot.css') }}">
+    <style>
+        /* --- Inline fallback styling if CSS missing --- */
+        body {
+            margin: 0;
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: #fff;
+        }
+
+        .chatbot-container {
+            width: 100%;
+            max-width: 420px;
+            height: 85vh;
+            background: #fff;
+            color: #333;
+            border-radius: 20px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        }
+
+        .chat-header {
+            background: #1f2937;
+            color: #fff;
+            padding: 15px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .chat-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .chat-avatar {
+            font-size: 1.8rem;
+        }
+
+        .chat-body {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            background: #f8fafc;
+        }
+
+        .bot-message, .user-message {
+            max-width: 80%;
+            padding: 10px 14px;
+            border-radius: 15px;
+            margin-bottom: 10px;
+            line-height: 1.4;
+        }
+
+        .bot-message {
+            background: #e5e7eb;
+            color: #111827;
+            align-self: flex-start;
+        }
+
+        .user-message {
+            background: #3b82f6;
+            color: white;
+            align-self: flex-end;
+            margin-left: auto;
+        }
+
+        .chat-input {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px;
+            background: #f1f5f9;
+            border-top: 1px solid #d1d5db;
+        }
+
+        .chat-input input {
+            flex: 1;
+            padding: 10px 12px;
+            border: none;
+            border-radius: 20px;
+            outline: none;
+            background: #fff;
+            font-size: 1rem;
+        }
+
+        .chat-input button {
+            border: none;
+            background: #3b82f6;
+            color: white;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .chat-input button:hover {
+            background: #2563eb;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #94a3b8;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="chatbot-container">
+        <!-- Header -->
+        <div class="chat-header">
+            <div class="chat-info">
+                <div class="chat-avatar">🤖</div>
+                <div>
+                    <h3>Autobot</h3>
+                    <p class="status">Online and ready to chat 💬</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat messages -->
+        <div class="chat-body" id="chat-box">
+            <div class="bot-message">Hello 👋<br>I'm Autobot. How can I help you today?</div>
+        </div>
+
+        <!-- Input area -->
+        <div class="chat-input">
+            <input type="text" id="user-input" placeholder="Type your message..." autocomplete="off">
+            <button id="mic-btn" title="Speak" onclick="startVoice()">🎤</button>
+            <button id="send-btn" title="Send" onclick="sendMessage()">➤</button>
+        </div>
+    </div>
+
+    <script>
+        // ✅ Speak the bot’s reply
+        function speakText(text) {
+            const speech = new SpeechSynthesisUtterance(text);
+            speech.lang = "en-US";
+            speech.rate = 1;
+            window.speechSynthesis.speak(speech);
+        }
+
+        // ✅ Send message to Flask
+        async function sendMessage() {
+            const userInput = document.getElementById("user-input").value.trim();
+            if (!userInput) return;
+
+            const chatBox = document.getElementById("chat-box");
+            appendMessage("user", userInput);
+            document.getElementById("user-input").value = "";
+
+            try {
+                const response = await fetch("/get", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ message: userInput })
+                });
+
+                const data = await response.json();
+                const botReply = data.reply || "Hmm...";
+                appendMessage("bot", botReply);
+                speakText(botReply);
+
+                // ✅ Open website if link is included
+                if (data.link) window.open(data.link, "_blank");
+            } catch (error) {
+                appendMessage("bot", "⚠️ Error connecting to server. Please try again.");
+            }
+        }
+
+        // ✅ Voice input handling
+        function startVoice() {
+            const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+            recognition.lang = "en-US";
+            recognition.start();
+
+            appendMessage("bot", "🎙 Listening...");
+
+            recognition.onresult = async function (event) {
+                const voiceInput = event.results[0][0].transcript;
+                appendMessage("user", voiceInput);
+
+                try {
+                    const response = await fetch("/get", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ message: voiceInput })
+                    });
+
+                    const data = await response.json();
+                    const botReply = data.reply || "Hmm...";
+                    appendMessage("bot", botReply);
+                    speakText(botReply);
+
+                    if (data.link) window.open(data.link, "_blank");
+                } catch {
+                    appendMessage("bot", "⚠️ Error processing your voice input.");
+                }
+            };
+
+            recognition.onerror = () => {
+                appendMessage("bot", "❌ Sorry, I couldn't hear that. Try again.");
+            };
+        }
+
+        // ✅ Append message to chatbox
+        function appendMessage(sender, message) {
+            const chatBox = document.getElementById("chat-box");
+            const msgDiv = document.createElement("div");
+            msgDiv.className = sender === "bot" ? "bot-message" : "user-message";
+            msgDiv.innerHTML = message;
+            chatBox.appendChild(msgDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        // ✅ Press Enter to send message
+        document.getElementById("user-input").addEventListener("keypress", (e) => {
+            if (e.key === "Enter") sendMessage();
+        });
+    </script>
+</body>
+</html>
